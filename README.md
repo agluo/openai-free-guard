@@ -89,15 +89,16 @@ The process refuses to start if `proxy_token` is empty or still looks like a
 placeholder, because without it the proxy would accept any caller and `/stats`
 would be public.
 
-Then point your gateway channel at the printed Base URL with the `proxy_token` as its key:
+Then edit the gateway channel that used to talk to OpenAI directly:
 
-```bash
-python3 newapi_switch.py --dry-run
-python3 newapi_switch.py --apply --proxy-url http://openai-free-guard:8317 --proxy-token <token>
-python3 newapi_switch.py --rollback --apply    # one-command rollback
-```
+| Field | New value |
+|---|---|
+| Base URL | `http://openai-free-guard:8317` (or `http://127.0.0.1:8317` if not containerised) |
+| Key | the `proxy_token` from `config.json` |
+| WebSocket | **off** — see Limitations |
 
-The original channel is disabled, never deleted — its keys stay in the database.
+Keep the old channel around but **disabled** rather than deleted: it still holds the
+original keys, so rolling back is a single status flip if anything misbehaves.
 
 ## Configuration
 
@@ -131,8 +132,8 @@ python tests/e2e.py
 ## Limitations
 
 * **No WebSocket.** `/v1/responses` over WebSocket bypasses an HTTP proxy entirely —
-  turn that switch off on the gateway channel (the switch script does) or the traffic is
-  invisible to the guard.
+  turn that switch off on the gateway channel, or that traffic is invisible to the guard
+  and counts as free while it is really being billed.
 * Counting is deliberately conservative. If OpenAI turns out not to count cached input
   toward the quota, the guard will stop earlier than strictly necessary. Verify once
   against the "data sharing incentive tier - input tokens" line on your usage dashboard.
