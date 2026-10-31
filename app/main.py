@@ -14,10 +14,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sqlite3
+import sys
 import threading
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
@@ -31,8 +34,39 @@ with open(CFG_PATH, "r", encoding="utf-8") as _f:
     CFG: dict[str, Any] = json.load(_f)
 
 UPSTREAM = CFG["upstream_base"].rstrip("/")
-PROXY_TOKEN = CFG.get("proxy_token") or ""
+PROXY_TOKEN = (CFG.get("proxy_token") or "").strip()
 DB_PATH = CFG.get("db_path", "/data/guard.db")
+
+logging.basicConfig(
+    level=os.environ.get("GUARD_LOG_LEVEL", CFG.get("log_level", "INFO")).upper(),
+    format="%(asctime)s %(levelname)-7s %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S%z",
+    stream=sys.stdout,
+)
+log = logging.getLogger("guard")
+
+_PLACEHOLDER_HINTS = ("change-me", "change me", "changeme", "replace", "placeholder",
+                      "your-token", "填这里", "xxxx", "example")
+
+
+def _token_is_usable(token: str) -> bool:
+    if len(token) < 8:
+        return False
+    low = token.lower()
+    return not any(h in low for h in _PLACEHOLDER_HINTS)
+
+
+if not PROXY_TOKEN:
+    # Without a token the proxy would accept anyone and /stats would be public.
+    if not CFG.get("allow_insecure"):
+        sys.exit("refusing to start: proxy_token is empty. Set it, or set allow_insecure=true "
+                 "if this instance really is private (e.g. unix socket only).")
+    log.warning("proxy_token is empty and allow_insecure=true: ANY caller is accepted")
+elif not _token_is_usable(PROXY_TOKEN):
+    if not CFG.get("allow_insecure"):
+        sys.exit("refusing to start: proxy_token still looks like a placeholder. "
+                 "Generate one with `openssl rand -hex 20`.")
+    log.warning("proxy_token looks like a placeholder and allow_insecure=true: change it")
 
 # ---------------------------------------------------------------- model mapping
 # Group membership is hard-coded from OpenAI's official list of models covered
@@ -75,6 +109,10 @@ _conn.executescript(
     CREATE TABLE IF NOT EXISTS keyerror(
         key_id TEXT PRIMARY KEY, bad_until REAL, last_status INTEGER,
         last_msg TEXT, ts REAL);
+    CREATE TABLE IF NOT EXISTS model_usage(
+        day TEXT NOT NULL, model TEXT NOT NULL, grp TEXT NOT NULL,
+        tokens INTEGER NOT NULL DEFAULT 0, reqs INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(day, model));
     """
 )
 _conn.commit()
@@ -112,15 +150,31 @@ def used_tokens(key_id: str, grp: str) -> int:
     return int(row[0]) if row else 0
 
 
-def charge(key_id: str, grp: str, tokens: int) -> None:
+def charge(key_id: str, grp: str, tokens: int, model: Optional[str] = None) -> None:
+    day = utc_day()
     with _db_lock:
         _conn.execute(
             """INSERT INTO usage(key_id, day, grp, tokens, reqs) VALUES(?,?,?,?,1)
                ON CONFLICT(key_id, day, grp)
                DO UPDATE SET tokens = tokens + excluded.tokens, reqs = reqs + 1""",
-            (key_id, utc_day(), grp, int(tokens)),
+            (key_id, day, grp, int(tokens)),
         )
+        if model:
+            _conn.execute(
+                """INSERT INTO model_usage(day, model, grp, tokens, reqs) VALUES(?,?,?,?,1)
+                   ON CONFLICT(day, model)
+                   DO UPDATE SET tokens = tokens + excluded.tokens, reqs = reqs + 1""",
+                (day, model, grp, int(tokens)),
+            )
         _conn.commit()
+
+
+def top_models(limit: int = 15) -> list[dict]:
+    with _db_lock:
+        rows = _conn.execute(
+            "SELECT model, grp, tokens, reqs FROM model_usage WHERE day=? "
+            "ORDER BY tokens DESC LIMIT ?", (utc_day(), limit)).fetchall()
+    return [{"model": r[0], "group": r[1], "tokens": r[2], "reqs": r[3]} for r in rows]
 
 
 def mark_bad(key_id: str, status: int, msg: str, ttl: float = 90.0) -> None:
@@ -293,7 +347,34 @@ def pick_key(grp: Optional[str], need: int, sid: Optional[str],
 
 
 # ------------------------------------------------------------------ responses
+NOTIFY_URL = CFG.get("notify_url") or ""
+NOTIFY_COOLDOWN = float(CFG.get("notify_cooldown", 1800))
+_notify_sent: dict[str, float] = {}
+
+
+def _notify(title: str, body: str, dedup: str = "") -> None:
+    """Fire-and-forget webhook (Bark, Slack, anything that takes JSON)."""
+    if not NOTIFY_URL:
+        return
+    if dedup:
+        now = time.time()
+        if _notify_sent.get(dedup, 0) + NOTIFY_COOLDOWN > now:
+            return
+        _notify_sent[dedup] = now
+
+    async def _send() -> None:
+        try:
+            await client.post(NOTIFY_URL, json={"title": title, "body": body}, timeout=8)
+        except Exception as exc:  # never let a webhook break a request
+            log.warning("notify failed: %s", exc)
+
+    asyncio.create_task(_send())
+
+
 def quota_error(model: str, grp: str, detail: str) -> JSONResponse:
+    log.warning("429 %s %s: %s", model, grp, detail)
+    _notify(f"free-tier quota exhausted ({grp})",
+            f"model={model}\n{detail}", dedup=f"{grp}:{model}")
     return JSONResponse(
         status_code=429,
         content={
@@ -365,12 +446,29 @@ def extract_usage(obj: dict) -> Optional[tuple[int, int]]:
 
 
 # ------------------------------------------------------------------------ app
-app = FastAPI(title="free-tier quota guard")
 client = httpx.AsyncClient(
     timeout=httpx.Timeout(connect=15, read=1800, write=120, pool=30),
     limits=httpx.Limits(max_connections=200, max_keepalive_connections=60),
     follow_redirects=False,
 )
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    log.info("started: upstream=%s tz=%s keys=%d limits=%s reserve=%s",
+             UPSTREAM, RESET_TZ_NAME, len(KEYS), CFG["limits"],
+             CFG.get("reserve_mode", "max_output"))
+    task = asyncio.create_task(_discover_loop()) if DISCOVERY_INTERVAL > 0 else None
+    try:
+        yield
+    finally:
+        if task:
+            task.cancel()
+        await client.aclose()
+        log.info("stopped")
+
+
+app = FastAPI(title="free-tier quota guard", lifespan=lifespan)
 
 HOP = {"host", "authorization", "content-length", "accept-encoding", "connection",
        "keep-alive", "transfer-encoding", "upgrade", "proxy-connection"}
@@ -401,12 +499,6 @@ async def _discover_loop() -> None:
         await asyncio.sleep(DISCOVERY_INTERVAL)
 
 
-@app.on_event("startup")
-async def _startup() -> None:
-    if DISCOVERY_INTERVAL > 0:
-        asyncio.create_task(_discover_loop())
-
-
 @app.get("/healthz")
 async def healthz() -> dict:
     return {"ok": True, "day": utc_day(), "reset_timezone": RESET_TZ_NAME,
@@ -429,6 +521,7 @@ async def stats(request: Request) -> Any:
             **{g: {"used": used_tokens(k["id"], g), "reserved": reserved(k["id"], g),
                    "limit": int(CFG["limits"][g])} for g in CFG["limits"]},
         }
+    out["top_models_today"] = top_models()
     return out
 
 
@@ -449,6 +542,7 @@ async def proxy(full_path: str, request: Request) -> Response:
     grp = classify(model)
 
     if grp == DENY:
+        log.info("403 model_not_covered: %s", model)
         return oai_error(
             403,
             f"model '{model}' is not in OpenAI's official complimentary-token list. "
@@ -518,6 +612,9 @@ async def proxy(full_path: str, request: Request) -> Response:
             if switch and status != 404:
                 mark_bad(key["id"], status, data[:300].decode("utf-8", "ignore"),
                          ttl=600 if status in (401, 403) else 90)
+            if switch:
+                log.warning("upstream %s from key %s (model=%s), trying another key",
+                            status, key["id"], model)
             nxt = candidates(grp, tried, model, need if grp else None) if switch else []
             if nxt:
                 key = nxt[0]
@@ -534,7 +631,14 @@ async def proxy(full_path: str, request: Request) -> Response:
     is_sse = ctype.startswith("text/event-stream") or bool(payload and payload.get("stream"))
 
     if not is_sse:
-        data = await resp.aread()
+        try:
+            data = await resp.aread()
+        except Exception as exc:
+            await resp.aclose()
+            if grp and payload:
+                release(key["id"], grp, need)
+            log.warning("reading upstream body failed: %s", exc)
+            return oai_error(502, f"failed to read upstream response: {exc}", "upstream_error")
         await resp.aclose()
         tokens = None
         if data:
@@ -546,7 +650,7 @@ async def proxy(full_path: str, request: Request) -> Response:
             release(key["id"], grp, need)
             used = sum(tokens) if tokens else need
             if used:
-                charge(key["id"], grp, used)
+                charge(key["id"], grp, used, model)
         return Response(content=data, status_code=resp.status_code,
                         media_type=ctype or "application/json",
                         headers={"x-guard-key": key["id"]})
@@ -563,9 +667,10 @@ async def proxy(full_path: str, request: Request) -> Response:
             if grp and payload:
                 release(key["id"], grp, need)
                 if scan.usage:
-                    charge(key["id"], grp, sum(scan.usage))
+                    charge(key["id"], grp, sum(scan.usage), model)
                 else:
-                    charge(key["id"], grp, estimate_input_tokens(payload) + scan.out_chars // 3)
+                    log.info("no usage in stream, estimating for %s", model)
+                    charge(key["id"], grp, estimate_input_tokens(payload) + scan.out_chars // 3, model)
 
     return StreamingResponse(body_iter(), status_code=resp.status_code,
                              media_type=ctype or "text/event-stream",

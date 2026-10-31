@@ -1,25 +1,23 @@
 {
   "_note": "Model groups are hard-coded from OpenAI's official list at help.openai.com/en/articles/10306912 . Models that are not listed there are NEVER free, so they are rejected by default.",
-
   "upstream_base": "https://api.openai.com",
   "proxy_token": "change-me: openssl rand -hex 20",
   "db_path": "/data/guard.db",
-
   "_limits_note": "Build tier: 250000 / 2500000. Launch or Grow tier: 1000000 / 10000000.",
   "_reset_note": "Daily boundary. OpenAI resets at 00:00 UTC. Other providers differ, e.g. Google's free tier rolls over at midnight Pacific -> America/Los_Angeles.",
   "reset_timezone": "UTC",
-  "limits": { "G1": 250000, "G2": 2500000 },
-
+  "limits": {
+    "G1": 250000,
+    "G2": 2500000
+  },
   "reserve_mode": "max_output",
   "margin_tokens": 0,
   "default_max_output": 8192,
   "max_reserve_per_request": 12288,
-
   "session_affinity": true,
   "session_ttl": 3600,
   "model_miss_ttl": 3600,
   "discovery_interval": 86400,
-
   "model_groups": {
     "G1": [
       "gpt-6.1-sol",
@@ -27,48 +25,90 @@
       "gpt-6-sol",
       "gpt-6-luna",
       "gpt-5.6-sol",
-      "gpt-5.5", "gpt-5.5-2026-04-23",
-      "gpt-5.4", "gpt-5.4-2026-03-05",
-      "gpt-5.2", "gpt-5.2-2025-12-11",
-      "gpt-5.1", "gpt-5.1-2025-11-13",
-      "gpt-5", "gpt-5-2025-08-07",
+      "gpt-5.5",
+      "gpt-5.5-2026-04-23",
+      "gpt-5.4",
+      "gpt-5.4-2026-03-05",
+      "gpt-5.2",
+      "gpt-5.2-2025-12-11",
+      "gpt-5.1",
+      "gpt-5.1-2025-11-13",
+      "gpt-5",
+      "gpt-5-2025-08-07",
       "gpt-5.1-codex",
       "gpt-5-codex",
       "gpt-5-chat-latest",
-      "gpt-4.5-preview", "gpt-4.5-preview-2025-02-27",
-      "gpt-4.1", "gpt-4.1-2025-04-14",
-      "gpt-4o", "gpt-4o-2024-05-13", "gpt-4o-2024-08-06", "gpt-4o-2024-11-20",
-      "o3", "o3-2025-04-16",
-      "o1", "o1-2024-12-17",
-      "o1-preview", "o1-preview-2024-09-12"
+      "gpt-4.5-preview",
+      "gpt-4.5-preview-2025-02-27",
+      "gpt-4.1",
+      "gpt-4.1-2025-04-14",
+      "gpt-4o",
+      "gpt-4o-2024-05-13",
+      "gpt-4o-2024-08-06",
+      "gpt-4o-2024-11-20",
+      "o3",
+      "o3-2025-04-16",
+      "o1",
+      "o1-2024-12-17",
+      "o1-preview",
+      "o1-preview-2024-09-12"
     ],
     "G2": [
       "gpt-5.6-terra",
       "gpt-5.6-luna",
-      "gpt-5.4-mini", "gpt-5.4-mini-2026-03-17",
-      "gpt-5.4-nano", "gpt-5.4-nano-2026-03-17",
+      "gpt-5.4-mini",
+      "gpt-5.4-mini-2026-03-17",
+      "gpt-5.4-nano",
+      "gpt-5.4-nano-2026-03-17",
       "gpt-5.1-codex-mini",
-      "gpt-5-mini", "gpt-5-mini-2025-08-07",
-      "gpt-5-nano", "gpt-5-nano-2025-08-07",
-      "gpt-4.1-mini", "gpt-4.1-mini-2025-04-14",
-      "gpt-4.1-nano", "gpt-4.1-nano-2025-04-14",
-      "gpt-4o-mini", "gpt-4o-mini-2024-07-18",
-      "o4-mini", "o4-mini-2025-04-16",
-      "o1-mini", "o1-mini-2024-09-12",
+      "gpt-5-mini",
+      "gpt-5-mini-2025-08-07",
+      "gpt-5-nano",
+      "gpt-5-nano-2025-08-07",
+      "gpt-4.1-mini",
+      "gpt-4.1-mini-2025-04-14",
+      "gpt-4.1-nano",
+      "gpt-4.1-nano-2025-04-14",
+      "gpt-4o-mini",
+      "gpt-4o-mini-2024-07-18",
+      "o4-mini",
+      "o4-mini-2025-04-16",
+      "o1-mini",
+      "o1-mini-2024-09-12",
       "codex-mini-latest"
     ]
   },
-
   "_passthrough_note": "Never part of the free program. Passing them through means they are billed at normal rates. Remove entries to block them instead.",
   "passthrough_models": [
-    "gpt-image-1", "gpt-image-1.5", "gpt-image-2",
-    "gpt-image-2.5-sunburst", "gpt-image-2.5-flare",
-    "tts-1", "tts-1-hd", "text-embedding-3-small"
+    "gpt-image-1",
+    "gpt-image-1.5",
+    "gpt-image-2",
+    "gpt-image-2.5-sunburst",
+    "gpt-image-2.5-flare",
+    "tts-1",
+    "tts-1-hd",
+    "text-embedding-3-small"
   ],
-
   "keys": [
-    { "id": "org1", "label": "account 1", "key": "sk-proj-REPLACE_ME_1" },
-    { "id": "org2", "label": "account 2", "key": "sk-proj-REPLACE_ME_2" },
-    { "id": "org3", "label": "account 3", "key": "sk-proj-REPLACE_ME_3" }
-  ]
+    {
+      "id": "org1",
+      "label": "account 1",
+      "key": "sk-proj-REPLACE_ME_1"
+    },
+    {
+      "id": "org2",
+      "label": "account 2",
+      "key": "sk-proj-REPLACE_ME_2"
+    },
+    {
+      "id": "org3",
+      "label": "account 3",
+      "key": "sk-proj-REPLACE_ME_3"
+    }
+  ],
+  "log_level": "INFO",
+  "_notify_note": "Optional webhook fired when a budget is exhausted. Bark: https://your.bark.server/push/<device_key> . Empty = disabled.",
+  "notify_url": "",
+  "notify_cooldown": 1800,
+  "allow_insecure": false
 }

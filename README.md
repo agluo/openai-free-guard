@@ -73,16 +73,21 @@ the provider-side prompt cache stays warm (cached input is ~10x cheaper).
 | Path | Purpose |
 |---|---|
 | `/healthz` | liveness, current day, reset timezone, seconds to reset, upstream models that are not covered |
-| `/stats` | per-key, per-group usage and reservations (requires the proxy token) |
+| `/stats` | per-key, per-group usage and reservations, plus `top_models_today` (requires the proxy token) |
 | everything else | forwarded to `upstream_base` |
 
 ## Quick start
 
 ```bash
 cp config.example.json config.json      # fill in proxy_token and your keys
+openssl rand -hex 20                    # <- paste this as proxy_token
 bash deploy.sh                          # builds, starts, health-checks, prints the base URL
 curl -s http://127.0.0.1:8317/healthz
 ```
+
+The process refuses to start if `proxy_token` is empty or still looks like a
+placeholder, because without it the proxy would accept any caller and `/stats`
+would be public.
 
 Then point your gateway channel at the printed Base URL with the `proxy_token` as its key:
 
@@ -106,6 +111,10 @@ The original channel is disabled, never deleted — its keys stay in the databas
 | `session_affinity` / `session_ttl` | keep a conversation on one key to preserve prompt caching |
 | `discovery_interval` | seconds between `/v1/models` polls used to surface unknown models (`0` disables) |
 | `reset_timezone` | IANA zone that defines the daily boundary. `UTC` for OpenAI, `America/Los_Angeles` for Google-style resets |
+| `log_level` | `INFO` by default. Lifted to `DEBUG` via `GUARD_LOG_LEVEL` too |
+| `notify_url` | optional webhook POSTed `{"title", "body"}` when a budget runs out (works with Bark) |
+| `notify_cooldown` | seconds before the same group+model may notify again (default 1800) |
+| `allow_insecure` | set `true` only to run without a real `proxy_token`; otherwise startup fails |
 
 ## Tests
 
