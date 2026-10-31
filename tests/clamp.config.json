@@ -1,0 +1,13 @@
+{
+  "upstream_base": "http://127.0.0.1:9099",
+  "proxy_token": "clamp-test-token",
+  "db_path": "/tmp/clamp-test.db",
+  "limits": { "G1": 60000 },
+  "reserve_mode": "max_output",
+  "max_reserve_per_request": 4096,
+  "clamp_max_output": true,
+  "clamp_min_tokens": 256,
+  "discovery_interval": 0,
+  "model_groups": { "G1": ["gpt-6-sol"] },
+  "keys": [{ "id": "org1", "label": "only", "key": "sk-good1111" }]
+}

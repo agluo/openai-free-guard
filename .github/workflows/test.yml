@@ -32,6 +32,15 @@ jobs:
           EXPECT_TZ: Asia/Shanghai
         run: python tests/timezone.py
 
+      - name: output clamp
+        run: |
+          GUARD_CONFIG=tests/clamp.config.json python -m uvicorn app.main:app --port 8319 --log-level warning &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8319/healthz && break
+            sleep 1
+          done
+          python tests/clamp.py
+
       - name: run end-to-end tests
         env:
           GUARD_DB: /tmp/guard-test.db

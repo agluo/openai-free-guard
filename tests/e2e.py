@@ -99,9 +99,10 @@ with httpx.stream("POST", f"{B}/v1/responses", headers=H,
 time.sleep(2)
 check("released", all(v["G2"]["reserved"] == 0 for v in stats()["keys"].values()))
 
-print("9) UTC rollover: move today's rows to yesterday, today starts at zero")
+print("9) daily rollover: move the server's day rows away, today starts at zero")
+day = httpx.get(f"{B}/healthz", timeout=10).json()["day"]
 con = sqlite3.connect(DB)
-con.execute("UPDATE usage SET day='2000-01-01' WHERE day=?", (time.strftime("%Y-%m-%d", time.gmtime()),))
+con.execute("UPDATE usage SET day='2000-01-01' WHERE day=?", (day,))
 con.commit()
 check("today is zero", sum(v["G2"]["used"] for v in stats()["keys"].values()) == 0)
 r = httpx.post(f"{B}/v1/responses", headers=H, json={"model": "gpt-6-sol", "input": "d"}, timeout=30)

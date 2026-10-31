@@ -45,7 +45,9 @@ async def responses(req: Request):
             yield f"event: response.completed\ndata: {json.dumps(done)}\n\n".encode()
         return StreamingResponse(gen(), media_type="text/event-stream")
     return {"id": "resp_1", "model": body.get("model"),
-            "usage": {"input_tokens": n_in, "output_tokens": n_out}}
+            "usage": {"input_tokens": n_in, "output_tokens": n_out},
+            "_seen": {k: body.get(k) for k in
+                      ("max_output_tokens", "max_tokens", "max_completion_tokens")}}
 
 
 @app.post("/v1/chat/completions")
@@ -65,4 +67,6 @@ async def chat(req: Request):
             yield f"data: {json.dumps(tail)}\n\n".encode()
             yield b"data: [DONE]\n\n"
         return StreamingResponse(gen(), media_type="text/event-stream")
-    return {"usage": {"prompt_tokens": 500, "completion_tokens": 50}}
+    return {"usage": {"prompt_tokens": 500, "completion_tokens": 50},
+            "_seen": {k: body.get(k) for k in
+                      ("max_output_tokens", "max_tokens", "max_completion_tokens")}}

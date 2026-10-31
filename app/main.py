@@ -319,6 +319,59 @@ def need_tokens(payload: dict) -> int:
     return est + max_output_of(payload) + int(CFG.get("margin_tokens", 0))
 
 
+CLAMP = bool(CFG.get("clamp_max_output", False))
+CLAMP_MIN = int(CFG.get("clamp_min_tokens", 256))
+
+
+def prepare_body(payload: Optional[dict], raw: bytes, path: str, grp: Optional[str],
+                 key_id: str, reserved_need: int) -> bytes:
+    """Adjust the outgoing body when needed.
+
+    Two independent things happen here:
+
+    * streaming chat completions must be asked for usage explicitly, otherwise
+      the upstream reports none and we cannot meter the request.
+    * with clamp_max_output enabled, the output cap is lowered to whatever the
+      chosen key can still afford, so a single long generation can never push
+      the account past its daily budget. Off by default: it truncates answers.
+    """
+    if not payload:
+        return raw
+
+    changed = False
+
+    if payload.get("stream") and path.endswith("chat/completions"):
+        so = payload.setdefault("stream_options", {})
+        if not so.get("include_usage"):
+            so["include_usage"] = True
+            changed = True
+
+    if CLAMP and grp and reserved_need:
+        est = estimate_input_tokens(payload)
+        # remaining() already includes our own reservation, add it back to get
+        # the headroom this request actually has.
+        headroom = remaining(key_id, grp) + reserved_need - est - int(CFG.get("margin_tokens", 0))
+        if headroom >= CLAMP_MIN:
+            field = next((f for f in ("max_output_tokens", "max_completion_tokens",
+                                      "max_tokens") if f in payload), None)
+            if field is None:
+                field = "max_output_tokens" if path.endswith("responses") else "max_completion_tokens"
+            try:
+                current = int(payload.get(field)) if payload.get(field) is not None else None
+            except (TypeError, ValueError):
+                current = None
+            if current is None or current > headroom:
+                payload[field] = headroom
+                changed = True
+                log.info("clamped %s: %s -> %d (headroom after %d input tokens)",
+                         field, current, headroom, est)
+        else:
+            log.warning("headroom %d < clamp_min_tokens %d for key %s, not clamping",
+                        headroom, CLAMP_MIN, key_id)
+
+    return json.dumps(payload, ensure_ascii=False).encode() if changed else raw
+
+
 # -------------------------------------------------------------------- selection
 def candidates(grp: Optional[str], exclude: set[str], model: Optional[str] = None,
                need: Optional[int] = None) -> list[dict]:
@@ -566,17 +619,10 @@ async def proxy(full_path: str, request: Request) -> Response:
     headers["accept-encoding"] = "identity"
 
     url = f"{UPSTREAM}/{full_path}"
-    body = raw
-    # Streaming chat completions only report usage when explicitly asked to.
-    if payload and payload.get("stream") and full_path.endswith("chat/completions"):
-        so = payload.setdefault("stream_options", {})
-        if not so.get("include_usage"):
-            so["include_usage"] = True
-            body = json.dumps(payload, ensure_ascii=False).encode()
-
     tried: set[str] = set()
     while True:
         tried.add(key["id"])
+        body = prepare_body(payload, raw, full_path, grp, key["id"], need)
         req = client.build_request(request.method, url, headers=headers, content=body,
                                    params=request.query_params)
         try:

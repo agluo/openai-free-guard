@@ -68,6 +68,23 @@ through untouched.
 `prompt_cache_key` is used for **session affinity**: a conversation stays on one key so
 the provider-side prompt cache stays warm (cached input is ~10x cheaper).
 
+### Reserving vs clamping
+
+Two different mechanisms, often confused:
+
+* **Reservation** (`reserve_mode`, `max_reserve_per_request`) — always on. Before
+  sending, the proxy reserves `estimate(input) + min(max_output_tokens, cap)` and
+  refuses the request if no key can cover it. The reservation is released the moment
+  the response finishes; only real usage is charged.
+* **Clamping** (`clamp_max_output`) — off by default. Lowers the output cap *inside the
+  request body* so the generation physically cannot exceed what is left. It protects
+  against a single long generation walking past the line, at the cost of truncating
+  answers. Worth turning on only if your workload produces long outputs.
+
+Neither of them can stop a stream midway: usage is only known from the final
+`response.completed` event, so by the time an overshoot is visible the request has
+already been made — and per OpenAI's rule an overshooting request is billed in full.
+
 ## Endpoints
 
 | Path | Purpose |
@@ -116,6 +133,8 @@ original keys, so rolling back is a single status flip if anything misbehaves.
 | `notify_url` | optional webhook POSTed `{"title", "body"}` when a budget runs out (works with Bark) |
 | `notify_cooldown` | seconds before the same group+model may notify again (default 1800) |
 | `allow_insecure` | set `true` only to run without a real `proxy_token`; otherwise startup fails |
+| `clamp_max_output` | **off by default.** When on, the outgoing output cap is lowered to what the chosen key can still afford — see below |
+| `clamp_min_tokens` | below this headroom the clamp is skipped instead of truncating to something useless (default 256) |
 
 ## Tests
 
