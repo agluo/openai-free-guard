@@ -27,6 +27,11 @@ jobs:
             sleep 1
           done
 
+      - name: daily boundary follows reset_timezone
+        env:
+          EXPECT_TZ: Asia/Shanghai
+        run: python tests/timezone.py
+
       - name: run end-to-end tests
         env:
           GUARD_DB: /tmp/guard-test.db

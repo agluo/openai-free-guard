@@ -3,7 +3,7 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app
 
-RUN pip install --no-cache-dir fastapi "uvicorn[standard]" httpx
+RUN pip install --no-cache-dir fastapi "uvicorn[standard]" httpx tzdata
 
 COPY app/main.py /app/main.py
 

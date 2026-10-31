@@ -6,6 +6,8 @@
   "db_path": "/data/guard.db",
 
   "_limits_note": "Build tier: 250000 / 2500000. Launch or Grow tier: 1000000 / 10000000.",
+  "_reset_note": "Daily boundary. OpenAI resets at 00:00 UTC. Other providers differ, e.g. Google's free tier rolls over at midnight Pacific -> America/Los_Angeles.",
+  "reset_timezone": "UTC",
   "limits": { "G1": 250000, "G2": 2500000 },
 
   "reserve_mode": "max_output",

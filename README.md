@@ -37,8 +37,10 @@ usage[key][group][utc_day] += tokens
   tokens you *used*. This is the deliberate, conservative choice.
 * Only models on OpenAI's official list are metered. Anything else is either rejected
   (`403`) or listed in `passthrough_models` (allowed, not metered — but billed normally).
-* Daily reset is implicit: usage rows are keyed by UTC date, so a new day simply has no
-  rows yet. Nothing is ever cleared, no cron job involved.
+* Daily reset is implicit: usage rows are keyed by a date string, so a new day simply has
+  no rows yet. Nothing is ever cleared, no cron job involved. The boundary follows
+  `reset_timezone` (default `UTC`) because providers do not all reset at 00:00 UTC —
+  Google's free tier, for example, rolls over at midnight Pacific time.
 
 Before every request the proxy reserves `estimate(input) + min(max_output_tokens, cap)`.
 That headroom matters because of the "entire request is billed" rule above — the proxy
@@ -70,7 +72,7 @@ the provider-side prompt cache stays warm (cached input is ~10x cheaper).
 
 | Path | Purpose |
 |---|---|
-| `/healthz` | liveness, current UTC day, seconds to reset, models seen upstream that are not covered |
+| `/healthz` | liveness, current day, reset timezone, seconds to reset, upstream models that are not covered |
 | `/stats` | per-key, per-group usage and reservations (requires the proxy token) |
 | everything else | forwarded to `upstream_base` |
 
@@ -103,6 +105,7 @@ The original channel is disabled, never deleted — its keys stay in the databas
 | `max_reserve_per_request` | caps the output part of the reservation. Lower it if your clients send a huge `max_output_tokens` but produce short answers |
 | `session_affinity` / `session_ttl` | keep a conversation on one key to preserve prompt caching |
 | `discovery_interval` | seconds between `/v1/models` polls used to surface unknown models (`0` disables) |
+| `reset_timezone` | IANA zone that defines the daily boundary. `UTC` for OpenAI, `America/Los_Angeles` for Google-style resets |
 
 ## Tests
 

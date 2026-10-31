@@ -20,6 +20,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import FastAPI, Request
@@ -80,14 +81,24 @@ _conn.commit()
 _db_lock = threading.Lock()
 
 
+# The daily boundary is configurable because providers do not all reset at
+# 00:00 UTC (e.g. Google's free tier rolls over at midnight Pacific).
+RESET_TZ_NAME = CFG.get("reset_timezone", "UTC")
+try:
+    RESET_TZ = ZoneInfo(RESET_TZ_NAME)
+except Exception:  # missing tzdata in the image, unknown zone, ...
+    RESET_TZ = timezone.utc
+    RESET_TZ_NAME = "UTC"
+
+
 def utc_day() -> str:
-    """The whole reset mechanism lives here: usage is bucketed by UTC date,
-    so a new day simply has no rows yet. Nothing is ever cleared."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    """The whole reset mechanism lives here: usage is bucketed by date in the
+    configured zone, so a new day simply has no rows yet. Nothing is cleared."""
+    return datetime.now(RESET_TZ).strftime("%Y-%m-%d")
 
 
 def seconds_to_reset() -> int:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(RESET_TZ)
     nxt = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     return max(1, int((nxt - now).total_seconds()))
 
@@ -288,7 +299,7 @@ def quota_error(model: str, grp: str, detail: str) -> JSONResponse:
         content={
             "error": {
                 "message": f"daily free-tier token quota exhausted for {grp} ({detail}); "
-                           f"model={model}. Resets at 00:00 UTC.",
+                           f"model={model}. Resets at 00:00 {RESET_TZ_NAME}.",
                 "type": "rate_limit_error",
                 "param": None,
                 "code": "free_tier_quota_exhausted",
@@ -398,7 +409,8 @@ async def _startup() -> None:
 
 @app.get("/healthz")
 async def healthz() -> dict:
-    return {"ok": True, "day": utc_day(), "reset_in": seconds_to_reset(),
+    return {"ok": True, "day": utc_day(), "reset_timezone": RESET_TZ_NAME,
+            "reset_in": seconds_to_reset(),
             "keys": [{"id": k["id"], "label": k.get("label", k["id"]),
                       "bad": bad_until(k["id"]) > time.time()} for k in KEYS],
             "not_in_official_free_list": sorted(NOT_COVERED)}
@@ -408,7 +420,8 @@ async def healthz() -> dict:
 async def stats(request: Request) -> Any:
     if PROXY_TOKEN and request.headers.get("authorization") != f"Bearer {PROXY_TOKEN}":
         return oai_error(401, "unauthorized")
-    out = {"day": utc_day(), "reset_in": seconds_to_reset(), "limits": CFG["limits"], "keys": {}}
+    out = {"day": utc_day(), "reset_timezone": RESET_TZ_NAME,
+           "reset_in": seconds_to_reset(), "limits": CFG["limits"], "keys": {}}
     for k in KEYS:
         out["keys"][k["id"]] = {
             "label": k.get("label", k["id"]),

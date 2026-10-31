@@ -2,7 +2,10 @@
   "upstream_base": "http://127.0.0.1:9099",
   "proxy_token": "test-token",
   "db_path": "/tmp/guard-test.db",
-  "limits": { "G1": 1300, "G2": 100000 },
+  "limits": {
+    "G1": 1300,
+    "G2": 100000
+  },
   "reserve_mode": "max_output",
   "margin_tokens": 0,
   "default_max_output": 50,
@@ -11,11 +14,33 @@
   "session_ttl": 3600,
   "model_miss_ttl": 3600,
   "discovery_interval": 0,
-  "model_groups": { "G1": ["gpt-6-sol"], "G2": ["gpt-5.6-terra"] },
-  "passthrough_models": ["gpt-image-2"],
+  "model_groups": {
+    "G1": [
+      "gpt-6-sol"
+    ],
+    "G2": [
+      "gpt-5.6-terra"
+    ]
+  },
+  "passthrough_models": [
+    "gpt-image-2"
+  ],
   "keys": [
-    { "id": "org1", "label": "no-model key", "key": "sk-n404AAAA" },
-    { "id": "org2", "label": "good 2", "key": "sk-goodBBBB" },
-    { "id": "org3", "label": "good 3", "key": "sk-goodCCCC" }
-  ]
+    {
+      "id": "org1",
+      "label": "no-model key",
+      "key": "sk-n404AAAA"
+    },
+    {
+      "id": "org2",
+      "label": "good 2",
+      "key": "sk-goodBBBB"
+    },
+    {
+      "id": "org3",
+      "label": "good 3",
+      "key": "sk-goodCCCC"
+    }
+  ],
+  "reset_timezone": "Asia/Shanghai"
 }
