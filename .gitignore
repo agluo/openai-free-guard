@@ -1,0 +1,10 @@
+config.json
+data/
+*.db
+*.db-wal
+*.db-shm
+__pycache__/
+*.pyc
+*.log
+backup-channel*.json
+.DS_Store

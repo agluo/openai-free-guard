@@ -1,0 +1,18 @@
+name: openai-free-guard
+
+services:
+  free-guard:
+    build: .
+    image: openai-free-guard:latest
+    container_name: ${GUARD_CONTAINER:-openai-free-guard}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8317:8317"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
