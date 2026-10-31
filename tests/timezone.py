@@ -7,8 +7,8 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-B = os.environ.get("GUARD_URL", "http://127.0.0.1:8317")
-TOKEN = os.environ.get("GUARD_TOKEN", "test-token")
+B = os.environ.get("TZ_URL", "http://127.0.0.1:8320")
+TOKEN = os.environ.get("TZ_TOKEN", "tz-test-token")
 TZ = os.environ.get("EXPECT_TZ", "Asia/Shanghai")
 
 hz = httpx.get(f"{B}/healthz", timeout=10).json()

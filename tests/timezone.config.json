@@ -1,0 +1,22 @@
+{
+  "upstream_base": "http://127.0.0.1:9099",
+  "proxy_token": "tz-test-token",
+  "db_path": "/tmp/tz-test.db",
+  "reset_timezone": "Asia/Shanghai",
+  "limits": {
+    "G1": 1000
+  },
+  "discovery_interval": 0,
+  "model_groups": {
+    "G1": [
+      "gpt-6-sol"
+    ]
+  },
+  "keys": [
+    {
+      "id": "org1",
+      "label": "only",
+      "key": "sk-good1111"
+    }
+  ]
+}

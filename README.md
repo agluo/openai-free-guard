@@ -38,9 +38,10 @@ usage[key][group][utc_day] += tokens
 * Only models on OpenAI's official list are metered. Anything else is either rejected
   (`403`) or listed in `passthrough_models` (allowed, not metered — but billed normally).
 * Daily reset is implicit: usage rows are keyed by a date string, so a new day simply has
-  no rows yet. Nothing is ever cleared, no cron job involved. The boundary follows
-  `reset_timezone` (default `UTC`) because providers do not all reset at 00:00 UTC —
-  Google's free tier, for example, rolls over at midnight Pacific time.
+  no rows yet. Nothing is ever cleared, no cron job involved. The boundary is 00:00
+  **UTC**, which is exactly when OpenAI resets its quota. `reset_timezone` exists only
+  for other providers that roll over elsewhere (Google's free tier uses midnight
+  Pacific); leave it alone if you are metering OpenAI.
 
 Before every request the proxy reserves `estimate(input) + min(max_output_tokens, cap)`.
 That headroom matters because of the "entire request is billed" rule above — the proxy
@@ -128,7 +129,7 @@ original keys, so rolling back is a single status flip if anything misbehaves.
 | `max_reserve_per_request` | caps the output part of the reservation. Lower it if your clients send a huge `max_output_tokens` but produce short answers |
 | `session_affinity` / `session_ttl` | keep a conversation on one key to preserve prompt caching |
 | `discovery_interval` | seconds between `/v1/models` polls used to surface unknown models (`0` disables) |
-| `reset_timezone` | IANA zone that defines the daily boundary. `UTC` for OpenAI, `America/Los_Angeles` for Google-style resets |
+| `reset_timezone` | IANA zone for the daily boundary. **Keep `UTC` for OpenAI** — that is where its quota resets. Other values exist only for providers that roll over elsewhere (e.g. Google: `America/Los_Angeles`) |
 | `log_level` | `INFO` by default. Lifted to `DEBUG` via `GUARD_LOG_LEVEL` too |
 | `notify_url` | optional webhook POSTed `{"title", "body"}` when a budget runs out (works with Bark) |
 | `notify_cooldown` | seconds before the same group+model may notify again (default 1800) |

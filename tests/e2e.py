@@ -108,7 +108,11 @@ check("today is zero", sum(v["G2"]["used"] for v in stats()["keys"].values()) ==
 r = httpx.post(f"{B}/v1/responses", headers=H, json={"model": "gpt-6-sol", "input": "d"}, timeout=30)
 check("budget available again", r.status_code == 200, f"got {r.status_code}")
 
-print("10) bad token -> 401")
+print("10) default boundary is UTC (OpenAI resets there, not in local time)")
+hz2 = httpx.get(f"{B}/healthz", timeout=10).json()
+check("reset_timezone == UTC", hz2.get("reset_timezone") == "UTC", str(hz2.get("reset_timezone")))
+
+print("11) bad token -> 401")
 r = httpx.post(f"{B}/v1/responses", headers={**H, "Authorization": "Bearer nope"},
                json={"model": "gpt-6-sol"}, timeout=30)
 check("401", r.status_code == 401, f"got {r.status_code}")

@@ -28,9 +28,13 @@ jobs:
           done
 
       - name: daily boundary follows reset_timezone
-        env:
-          EXPECT_TZ: Asia/Shanghai
-        run: python tests/timezone.py
+        run: |
+          GUARD_CONFIG=tests/timezone.config.json python -m uvicorn app.main:app --port 8320 --log-level warning &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8320/healthz && break
+            sleep 1
+          done
+          EXPECT_TZ=Asia/Shanghai python tests/timezone.py
 
       - name: output clamp
         run: |
