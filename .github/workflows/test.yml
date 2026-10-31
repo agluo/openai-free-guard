@@ -1,0 +1,33 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: install
+        run: pip install fastapi "uvicorn[standard]" httpx
+
+      - name: start mock upstream and guard
+        run: |
+          rm -f /tmp/guard-test.db*
+          python -m uvicorn tests.mock_upstream:app --port 9099 --log-level warning &
+          GUARD_CONFIG=tests/config.example.json python -m uvicorn app.main:app --port 8317 --log-level warning &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8317/healthz && break
+            sleep 1
+          done
+
+      - name: run end-to-end tests
+        env:
+          GUARD_DB: /tmp/guard-test.db
+        run: python tests/e2e.py
